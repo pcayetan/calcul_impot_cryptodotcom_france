@@ -8,14 +8,19 @@ class wallet:
     total_in = 0
     total_out = 0
     coin_api = []
+    year = 2022
 
-    def __init__(self) -> None:
+    def __init__(self, year) -> None:
+        self.year = year
         self.get_coins()
 
     def analyze_trade(self, trade):
         self.check_currency(trade[2])
         self.check_currency(trade[4])
-        
+        self.update_wallet(trade, 2)
+        self.update_wallet(trade, 4)
+        self.update_total_in(trade)
+
     
     def check_currency(self, currency):
         if(currency in self.coins.keys() or currency is np.nan or currency == 'EUR'):
@@ -59,3 +64,18 @@ class wallet:
     def save_coins(self):
         with open('data/coins.pickle', 'wb') as file:
             pickle.dump(self.coins, file)
+
+    def update_total_in(self, trade):
+        if (("EUR ->" in trade[1]) or ("Buy " in trade[1]) or ("From " in trade[1])):
+            self.total_in += trade[7]
+
+    def update_wallet(self, trade, emplacement):
+        if(trade[emplacement] is np.nan or trade[emplacement] == 'EUR'):
+            return
+        value = self.values.get(trade[emplacement])
+        if(value):
+            self.values.update({trade[emplacement]: value+trade[emplacement+1]})
+        else:
+            self.values.update({trade[emplacement]: trade[emplacement+1]})
+        if self.values[trade[emplacement]] < 0.1:
+            del self.values[trade[emplacement]]
