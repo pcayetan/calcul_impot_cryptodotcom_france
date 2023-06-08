@@ -7,11 +7,12 @@ class wallet:
     values = {}
     total_in = 0
     total_out = 0
-    coin_api = []
-    year = 2022
+    nb_out = 0
+    coins_api = []
+    year = "2022"
+    array_out = np.array(["Date", "Prix total d'acquisition", "Valeur cession", "Valeur portefeuille"])
 
-    def __init__(self, year) -> None:
-        self.year = year
+    def __init__(self) -> None:
         self.get_coins()
 
     def analyze_trade(self, trade):
@@ -20,22 +21,40 @@ class wallet:
         self.update_wallet(trade, 2)
         self.update_wallet(trade, 4)
         self.update_total_in(trade)
+        self.update_out(trade)
 
     
     def check_currency(self, currency):
         if(currency in self.coins.keys() or currency is np.nan or currency == 'EUR'):
             return
-        if not self.coin_api:
+        if not self.coins_api:
             self.get_coins_api()
-        for coin in self.coin_api:
+        encountered_values = []
+        for coin in self.coins_api:
             if(coin['symbol'] == currency.lower()):
-                self.coins.update({currency: coin['id']})
-                self.save_coins()
-                return
-        print("Coin not found in API:", currency)
-        id = input("\nGive id:")
-        self.coins.update({currency: id})
+                encountered_values.append(coin['id'])
+
+        index = 0
+        if(len(encountered_values) == 0):
+            print("Coin not found in API:", currency)
+            id = input("\nGive id:")
+            self.coins.update({currency: id})
+            self.save_coins()
+            return
+        if(len(encountered_values) > 1):
+            print("Multiple IDs found for ", currency, "\n")
+            i = 0
+            for value in encountered_values:
+                print(value, " : ", i)
+                i += 1
+            try:
+                index = int(input("\nType the number for the correct ID:"))
+            except ValueError:
+                print("Please enter a valid integer")
+        self.coins.update({currency: encountered_values[index]})
         self.save_coins()
+        
+        
     
     def print_coins_dictionnary(self):
         print(self.coins)
@@ -43,15 +62,15 @@ class wallet:
     def get_coins_api(self):
         try:
             with open('data/coins_api.pickle', 'rb') as file:
-                self.coin_api = pickle.load(file)
+                self.coins_api = pickle.load(file)
         except EOFError:
             endpoint = api.api
-            self.coin_api = endpoint.get_coin_list()
+            self.coins_api = endpoint.get_coin_list()
             self.save_coins_api()
 
     def save_coins_api(self):
         with open('data/coins_api.pickle', 'wb') as file:
-            pickle.dump(self.coin_api, file)
+            pickle.dump(self.coins_api, file)
 
     
     def get_coins(self):
@@ -79,3 +98,30 @@ class wallet:
             self.values.update({trade[emplacement]: trade[emplacement+1]})
         if self.values[trade[emplacement]] < 0.1:
             del self.values[trade[emplacement]]
+
+    def update_out(self, trade):
+        # Calculer la cession
+        if ("-> EUR" in trade[1]):
+            self.nb_out += 1
+            self.total_out += trade[7]
+            #if trade[0][:4] == self.year:
+            date = self.setup_date(trade[0][:10])
+            valeur_portefeuille = self.global_value(date)
+            #else:
+                #valeur_portefeuille = np.nan
+            row = np.array([trade[0], self.total_in, trade[7], valeur_portefeuille])
+            self.array_out = np.vstack((self.array_out, row))
+
+    def setup_date(self, date):
+        date = date.replace("/", "-")
+        flipped_date = "-".join(date.split("-")[::-1])
+        return flipped_date
+    
+    def global_value(self, date):
+        wallet_value = 0
+        for coin_id in self.values:
+            if(self.values[coin_id] != 0):
+                endpoint = api.api
+                coin_value = endpoint.fetch_coin_value(endpoint,self.coins[coin_id], date)
+                wallet_value += coin_value * self.values[coin_id]
+        return wallet_value
